@@ -11,4 +11,4 @@ at https://pgdg-packaging.github.io/pgdg-rpms-docs/
 
 ## Licence
 
-MIT licence; see [LICENSE.txt](LICENSE.txt).
+PostgreSQL License; see [LICENSE.txt](LICENSE.txt).
