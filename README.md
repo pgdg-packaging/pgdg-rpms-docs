@@ -8,3 +8,7 @@ at https://pgdg-packaging.github.io/pgdg-rpms-docs/
   the build steps for each package. `data.json` is generated from the specs
   with `rpmspec`; it shows pgrpms master at the commit named in the commit
   message.
+
+## Licence
+
+MIT licence; see [LICENSE.txt](LICENSE.txt).
