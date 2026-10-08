@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Build and runtime dependencies between the PostgreSQL RPM repository packages, per distro, with build steps for each package.">
+<title>PGDG Build Order</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+html { color-scheme: light; }
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+
+/* Layout: control bar on top; package detail column beside a layered build graph; full build-step ladder below. */
+:root {
+  --bg: #f5f7f8;
+  --panel: #ffffff;
+  --ink: #17232b;
+  --muted: #5b6b75;
+  --line: #d8e0e4;
+  --accent: #1f5f8b;
+  --accent-soft: #e2edf5;
+  --build: #1f5f8b;
+  --run: #b06a14;
+  --run-soft: #f8ecdc;
+  --alt: #7a8790;
+  --sel: #0f3d5c;
+  --font-ui: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1619; --panel: #162126; --ink: #e3ebef; --muted: #91a2ac; --line: #2a3a42;
+    --accent: #7db8e3; --accent-soft: #1b3344; --build: #7db8e3; --run: #e5a556; --run-soft: #3a2a14;
+    --alt: #8796a0; --sel: #b9dcf5; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1619; --panel: #162126; --ink: #e3ebef; --muted: #91a2ac; --line: #2a3a42;
+  --accent: #7db8e3; --accent-soft: #1b3344; --build: #7db8e3; --run: #e5a556; --run-soft: #3a2a14;
+  --alt: #8796a0; --sel: #b9dcf5; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1400px; margin: 0 auto; padding-inline: 20px; padding-block: 20px 48px; display: grid; gap: 20px; }
+header { display: grid; gap: 6px; }
+h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+h2 { font-size: 15px; font-weight: 600; margin: 0; }
+h3 { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.lede { color: var(--muted); margin: 0; max-width: 75ch; }
+code, .mono { font-family: var(--font-mono); font-size: 12.5px; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+select, input[type="search"] { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+input[type="search"] { font-family: var(--font-mono); font-size: 13px; width: min(320px, 80vw); }
+select:focus-visible, input:focus-visible, button:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.stats { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
+.main { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
+.pkghead { display: grid; gap: 4px; }
+.pkgname { font-family: var(--font-mono); font-size: 18px; font-weight: 600; word-break: break-all; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { font-size: 12px; border-radius: 999px; padding: 1px 9px; background: var(--accent-soft); color: var(--ink); font-variant-numeric: tabular-nums; }
+.pill.run { background: var(--run-soft); }
+.deplist { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.deplist li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+.deplist li:last-child { border-bottom: 0; }
+.dep { font-family: var(--font-mono); font-size: 12px; color: var(--muted); word-break: break-all; }
+.sub { font-family: var(--font-mono); font-size: 12px; color: var(--muted); margin-top: 6px; }
+.link { font-family: var(--font-mono); font-size: 12.5px; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; word-break: break-all; }
+.link:hover { text-decoration: underline; }
+.empty { color: var(--muted); font-size: 13px; margin: 0; }
+.kind { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; border-radius: 3px; padding: 0 5px; }
+.kind.b { color: var(--build); border: 1px solid var(--build); }
+.kind.r { color: var(--run); border: 1px solid var(--run); }
+.graphbox { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+svg text { font-family: var(--font-mono); font-size: 11.5px; fill: var(--ink); }
+svg .lvl { font-family: var(--font-ui); font-size: 11px; fill: var(--muted); letter-spacing: 0.06em; }
+.gnode rect { fill: var(--panel); stroke: var(--line); stroke-width: 1; }
+.gnode { cursor: pointer; }
+.gnode.focus rect { fill: var(--accent-soft); stroke: var(--sel); stroke-width: 2; }
+.gnode:hover rect { stroke: var(--accent); }
+.gedge { fill: none; stroke-width: 1.3; opacity: 0.55; }
+.gedge.b { stroke: var(--build); }
+.gedge.r { stroke: var(--run); stroke-dasharray: 4 3; }
+.gedge.hl { opacity: 1; stroke-width: 2.2; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); font-size: 12px; align-items: center; }
+.legend svg { vertical-align: middle; }
+.steps { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.step { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; align-items: start; }
+.stepno { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; padding-top: 3px; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.chip { font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 4px; padding: 1px 7px; cursor: pointer; }
+.chip:hover { border-color: var(--accent); }
+.chip.focus { background: var(--accent-soft); border-color: var(--sel); font-weight: 600; }
+.chip.cat-non-common { }
+.chip .pg { color: var(--muted); }
+.copybar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+button.btn { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+button.btn:hover { border-color: var(--accent); }
+textarea.copy { width: 100%; min-height: 0; height: 0; opacity: 0; position: absolute; pointer-events: none; }
+.note { color: var(--muted); font-size: 12.5px; max-width: 90ch; margin: 0; }
+.note li { margin-bottom: 3px; }
+details summary { cursor: pointer; font-weight: 600; }
+.loading { color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .gedge { transition: opacity .12s, stroke-width .12s; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>PGDG Build Order</h1>
+    <p class="lede">Which packages in the pgrpms tree must be built before another, for each distro. Pick a package to see everything it needs, in the order to build it, and everything that needs it.</p>
+  </header>
+
+  <div class="controls">
+    <div class="field"><label for="distro">Distro</label>
+      <select id="distro"></select></div>
+    <div class="field"><label for="pkg">Package</label>
+      <input id="pkg" type="search" list="pkglist" placeholder="postgis37_18" autocomplete="off" spellcheck="false">
+      <datalist id="pkglist"></datalist></div>
+    <div class="field"><label for="pgf">Build ladder PG</label>
+      <select id="pgf"></select></div>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <div class="main">
+    <section class="panel" id="detail" aria-live="polite"><p class="loading">Loading the graph…</p></section>
+    <section class="panel" id="chain">
+      <div class="copybar" style="justify-content: space-between">
+        <h2 id="chaintitle">Build chain</h2>
+        <div class="copybar"><button class="btn" id="copyorder" type="button">Copy build order</button><span id="copied" class="note"></span></div>
+      </div>
+      <div class="legend">
+        <span><svg width="28" height="8"><line x1="0" y1="4" x2="28" y2="4" stroke="var(--build)" stroke-width="2"/></svg> build dependency (BuildRequires)</span>
+        <span><svg width="28" height="8"><line x1="0" y1="4" x2="28" y2="4" stroke="var(--run)" stroke-width="2" stroke-dasharray="4 3"/></svg> runtime only (Requires)</span>
+        <span>Columns are build steps; left is built first.</span>
+      </div>
+      <div class="graphbox" id="graph"></div>
+      <ol class="steps" id="chainsteps"></ol>
+    </section>
+  </div>
+
+  <section class="panel">
+    <div class="copybar" style="justify-content: space-between">
+      <h2 id="laddertitle">Full build ladder</h2>
+    </div>
+    <p class="note">Every package in one step only depends on packages in earlier steps, so a step can be built in parallel. Common, extras and non-free packages are shown with the PostgreSQL version selected above.</p>
+    <ol class="steps" id="ladder"></ol>
+  </section>
+
+  <section class="panel">
+    <details>
+      <summary>How this was made</summary>
+      <ul class="note">
+        <li>Every spec in <code>main/{common,non-common,extras,non-free}</code> was parsed with <code>rpmspec -q</code> for each OS directory it has (EL-8/9/10, F-43/44/45, SLES-15/16, AL-2023). Non-common specs were parsed once per PostgreSQL version directory (<code>14</code> … <code>20</code>) they are linked from.</li>
+        <li>Edges come from <code>BuildRequires</code> and from the <code>Requires</code> of each subpackage, matched against the binary package names and <code>Provides</code> of the other specs. Dependencies on OS packages are not shown.</li>
+        <li>Automatic dependencies (shared library sonames, <code>pkgconfig()</code>, <code>python3.Xdist()</code>) are only generated at build time, so they are missing here. Where a package links to a library it does not name in its spec, the build edge usually covers it, as with gdal's <code>BuildRequires: proj98-devel</code>.</li>
+        <li>When several packages provide one name (for example <code>postgis</code> or <code>postgresql-server</code>), the one for the same PostgreSQL version wins. When there is still more than one, the edge is shown as "any of" and does not change the build steps.</li>
+        <li>The host's rpm evaluated the specs with <code>rhel</code>, <code>fedora</code>, <code>suse_version</code> or <code>amzn</code> defined. SLES-only macros that the host does not have may hide a few SLES branches. On F-45, SLES and EL-8, Python version macros that call an interpreter missing on the host were pinned to that distro's Python.</li>
+        <li>Generated <span id="gendate">2026-10-08</span> from pgrpms master (<code>e8c487dca</code>).</li>
+      </ul>
+    </details>
+  </section>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  const DISTROS = ["EL-8", "EL-9", "EL-10", "F-43", "F-44", "F-45", "SLES-15", "SLES-16", "AL-2023"];
+  const $ = (id) => document.getElementById(id);
+  let DATA = null, G = null, OUT = null, IN = null, cur = null;
+
+  function store(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function recall(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function el(tag, attrs, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (k === "class") e.className = v; else if (k === "text") e.textContent = v;
+      else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+    }
+    for (const c of kids) if (c != null) e.append(c);
+    return e;
+  }
+  function plink(id) { return el("button", { class: "link", type: "button", text: id, onclick: () => select(id) }); }
+
+  function useDistro(d) {
+    G = DATA[d];
+    OUT = new Map(); IN = new Map();
+    for (const id of Object.keys(G.nodes)) { OUT.set(id, []); IN.set(id, []); }
+    for (const e of G.edges) { OUT.get(e[0]).push(e); IN.get(e[1]).push(e); }
+    const dl = $("pkglist"); dl.textContent = "";
+    for (const id of Object.keys(G.nodes).sort()) dl.append(el("option", { value: id }));
+    const pgs = [...new Set(Object.values(G.nodes).map(n => n.pg).filter(Boolean))].sort((a, b) => a - b);
+    const pgf = $("pgf"), keep = pgf.value || recall("depgraph.pg") || "18";
+    pgf.textContent = "";
+    for (const p of pgs) pgf.append(el("option", { value: p, text: "PostgreSQL " + p }));
+    pgf.append(el("option", { value: "all", text: "All versions" }));
+    pgf.value = pgs.includes(keep) || keep === "all" ? keep : pgs[pgs.length - 1];
+    const steps = 1 + Math.max(...Object.values(G.nodes).map(n => n.level));
+    $("stats").textContent = `${Object.keys(G.nodes).length.toLocaleString()} source packages · ${G.edges.length.toLocaleString()} dependency links · ${steps} build steps`;
+    ladder();
+  }
+
+  // Everything x needs, through dependencies that have exactly one provider.
+  function closure(x) {
+    const seen = new Set([x]), todo = [x];
+    while (todo.length) {
+      const v = todo.pop();
+      for (const e of OUT.get(v)) if (e[5] === 1 && !seen.has(e[1])) { seen.add(e[1]); todo.push(e[1]); }
+    }
+    return seen;
+  }
+
+  function select(id, fromHash) {
+    if (!G.nodes[id]) return;
+    cur = id; $("pkg").value = id;
+    store("depgraph.pkg", id);
+    if (!fromHash) { try { history.replaceState(null, "", "#" + id); } catch (e) {} }
+    detail(); chain(); markLadder();
+  }
+
+  function detail() {
+    const n = G.nodes[cur], box = $("detail");
+    box.textContent = "";
+    box.append(el("div", { class: "pkghead" },
+      el("div", { class: "pkgname", text: cur }),
+      el("div", { class: "meta" },
+        el("span", { class: "pill", text: n.version }),
+        el("span", { class: "pill", text: n.cat }),
+        n.pg ? el("span", { class: "pill", text: "PG " + n.pg }) : null,
+        el("span", { class: "pill", text: "step " + (n.level + 1) })),
+      el("div", { class: "sub", text: "Subpackages: " + n.bins.join(", ") })));
+
+    const out = OUT.get(cur);
+    const br = out.filter(e => e[2] === "b");
+    box.append(el("h3", { text: "Build requires (" + new Set(br.map(e => e[1])).size + ")" }));
+    box.append(depList(br, 1));
+
+    const rr = out.filter(e => e[2] === "r");
+    const bySub = new Map();
+    for (const e of rr) { if (!bySub.has(e[4])) bySub.set(e[4], []); bySub.get(e[4]).push(e); }
+    box.append(el("h3", { text: "Runtime requires (" + new Set(rr.map(e => e[1])).size + ")" }));
+    if (!rr.length) box.append(el("p", { class: "empty", text: "No runtime dependencies on other repo packages." }));
+    for (const [sub, es] of [...bySub].sort()) {
+      box.append(el("div", { class: "sub", text: sub }));
+      box.append(depList(es, 1));
+    }
+
+    const inn = IN.get(cur);
+    const users = new Map();
+    for (const e of inn) { const k = users.get(e[0]) || new Set(); k.add(e[2]); users.set(e[0], k); }
+    box.append(el("h3", { text: "Needed by (" + users.size + ")" }));
+    if (!users.size) box.append(el("p", { class: "empty", text: "Nothing in the repo depends on it." }));
+    else {
+      const ul = el("ul", { class: "deplist" });
+      const rows = [...users].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
+      const LIMIT = 40;
+      rows.forEach(([u, kinds], i) => {
+        const li = el("li", {}, plink(u), el("span", {}, ...[...kinds].sort().map(k => el("span", { class: "kind " + k, text: k === "b" ? "build" : "run" }))));
+        if (i >= LIMIT) li.hidden = true;
+        ul.append(li);
+      });
+      box.append(ul);
+      if (rows.length > LIMIT) {
+        const more = el("button", { class: "btn", type: "button", text: `Show all ${rows.length}` , onclick: () => { ul.querySelectorAll("li").forEach(li => li.hidden = false); more.remove(); } });
+        box.append(more);
+      }
+    }
+  }
+
+  function depList(es, _) {
+    const byDep = new Map();
+    for (const e of es) { if (!byDep.has(e[3])) byDep.set(e[3], []); byDep.get(e[3]).push(e[1]); }
+    if (!byDep.size) return el("p", { class: "empty", text: "None from this repo." });
+    const ul = el("ul", { class: "deplist" });
+    for (const [dep, ts] of [...byDep].sort()) {
+      const right = ts.length === 1 ? plink(ts[0]) :
+        el("span", { class: "dep", text: "any of " + ts.length + ": " + ts.slice(0, 4).join(", ") + (ts.length > 4 ? ", …" : "") });
+      ul.append(el("li", {}, el("span", { class: "dep", text: dep }), right));
+    }
+    return ul;
+  }
+
+  function chainSteps(set) {
+    const by = new Map();
+    for (const id of set) { const l = G.nodes[id].level; if (!by.has(l)) by.set(l, []); by.get(l).push(id); }
+    return [...by].sort((a, b) => a[0] - b[0]).map(([l, ids]) => [l, ids.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))]);
+  }
+
+  function chain() {
+    const set = closure(cur), steps = chainSteps(set);
+    $("chaintitle").textContent = set.size === 1 ? `Build chain: ${cur} has no prerequisites in the repo` :
+      `Build chain: ${set.size - 1} packages before ${cur}`;
+    const ol = $("chainsteps"); ol.textContent = "";
+    steps.forEach(([l, ids], i) => {
+      ol.append(el("li", { class: "step" }, el("span", { class: "stepno", text: "Step " + (i + 1) }),
+        el("div", { class: "chips" }, ...ids.map(id => chip(id)))));
+    });
+    drawGraph(set, steps);
+  }
+
+  function chip(id) {
+    const n = G.nodes[id];
+    const c = el("button", { class: "chip cat-" + n.cat + (id === cur ? " focus" : ""), type: "button", "data-id": id, title: n.pkg + " " + n.version + " (" + n.cat + ")", onclick: () => select(id) });
+    c.textContent = id;
+    return c;
+  }
+
+  const NS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs) { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; }
+
+  function drawGraph(set, steps) {
+    const box = $("graph"); box.textContent = "";
+    const BW = 190, BH = 24, CG = 64, RG = 8, TOP = 26, PADX = 12;
+    const pos = new Map();
+    let maxRows = 0;
+    steps.forEach(([l, ids], ci) => {
+      ids.forEach((id, ri) => pos.set(id, { x: PADX + ci * (BW + CG), y: TOP + ri * (BH + RG) }));
+      maxRows = Math.max(maxRows, ids.length);
+    });
+    const W = PADX * 2 + steps.length * BW + (steps.length - 1) * CG;
+    const H = TOP + maxRows * (BH + RG) + 6;
+    const svg = sv("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Dependency graph for " + cur });
+    steps.forEach(([l], ci) => {
+      const t = sv("text", { x: PADX + ci * (BW + CG), y: 15, class: "lvl" }); t.textContent = "STEP " + (ci + 1); svg.append(t);
+    });
+    // One edge per pair; a build edge wins over a runtime-only one.
+    const pairs = new Map();
+    for (const id of set) for (const e of OUT.get(id)) {
+      if (e[5] !== 1 || !set.has(e[1])) continue;
+      const k = e[1] + "\u0000" + id;
+      if (!pairs.has(k) || e[2] === "b") pairs.set(k, e[2]);
+    }
+    const eg = sv("g", {}), ng = sv("g", {});
+    svg.append(eg, ng);
+    const edgeEls = [];
+    for (const [k, kind] of pairs) {
+      const [from, to] = k.split("\u0000"), a = pos.get(from), b = pos.get(to);
+      const x1 = a.x + BW, y1 = a.y + BH / 2, x2 = b.x, y2 = b.y + BH / 2, mx = (x1 + x2) / 2;
+      const p = sv("path", { d: `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`, class: "gedge " + kind });
+      p.dataset.from = from; p.dataset.to = to;
+      eg.append(p); edgeEls.push(p);
+    }
+    for (const id of set) {
+      const { x, y } = pos.get(id);
+      const g = sv("g", { class: "gnode" + (id === cur ? " focus" : ""), transform: `translate(${x},${y})`, tabindex: "0", role: "button" });
+      g.append(sv("rect", { width: BW, height: BH, rx: 4, ry: 4 }));
+      const t = sv("text", { x: 8, y: 16 });
+      t.textContent = id.length > 25 ? id.slice(0, 24) + "…" : id;
+      const tip = sv("title", {}); tip.textContent = id + " " + G.nodes[id].version;
+      g.append(t, tip);
+      g.addEventListener("click", () => select(id));
+      g.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(id); } });
+      const hl = (on) => edgeEls.forEach(p => p.classList.toggle("hl", on && (p.dataset.from === id || p.dataset.to === id)));
+      g.addEventListener("mouseenter", () => hl(true)); g.addEventListener("mouseleave", () => hl(false));
+      g.addEventListener("focus", () => hl(true)); g.addEventListener("blur", () => hl(false));
+      ng.append(g);
+    }
+    box.append(svg);
+  }
+
+  function ladder() {
+    const pg = $("pgf").value;
+    const ids = Object.keys(G.nodes).filter(id => pg === "all" || !G.nodes[id].pg || G.nodes[id].pg === pg);
+    const steps = chainSteps(ids);
+    $("laddertitle").textContent = `Full build ladder: ${$("distro").value}, ${pg === "all" ? "all PostgreSQL versions" : "PostgreSQL " + pg} (${ids.length} packages)`;
+    const ol = $("ladder"); ol.textContent = "";
+    steps.forEach(([l, list], i) => {
+      ol.append(el("li", { class: "step" }, el("span", { class: "stepno", text: `Step ${i + 1} · ${list.length}` }),
+        el("div", { class: "chips" }, ...list.map(id => chip(id)))));
+    });
+  }
+  function markLadder() {
+    document.querySelectorAll("#ladder .chip").forEach(c => c.classList.toggle("focus", c.dataset.id === cur));
+  }
+
+  function orderText() {
+    const steps = chainSteps(closure(cur));
+    return `# ${$("distro").value}: build order for ${cur}\n` +
+      steps.map(([l, ids], i) => `# step ${i + 1}\n` + ids.join("\n")).join("\n") + "\n";
+  }
+
+  $("copyorder").addEventListener("click", () => {
+    const text = orderText(), msg = $("copied");
+    const done = (ok) => { msg.textContent = ok ? "Copied" : "Copy is blocked here; select the text below"; setTimeout(() => msg.textContent = "", 2500); };
+    try {
+      navigator.clipboard.writeText(text).then(() => done(true), () => { fallback(text); done(false); });
+    } catch (e) { fallback(text); done(false); }
+  });
+  function fallback(text) {
+    let pre = $("orderpre");
+    if (!pre) { pre = el("pre", { id: "orderpre", class: "mono", style: "white-space: pre-wrap; margin: 0" }); $("chain").append(pre); }
+    pre.textContent = text;
+    const r = document.createRange(); r.selectNodeContents(pre);
+    const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+  }
+
+  const dsel = $("distro");
+  for (const d of DISTROS) dsel.append(el("option", { value: d, text: d }));
+  dsel.value = recall("depgraph.distro") || "EL-9";
+  dsel.addEventListener("change", () => {
+    store("depgraph.distro", dsel.value);
+    useDistro(dsel.value);
+    select(G.nodes[cur] ? cur : Object.keys(G.nodes).find(id => id.startsWith(cur.split("_")[0])) || "postgresql18");
+  });
+  $("pgf").addEventListener("change", () => { store("depgraph.pg", $("pgf").value); ladder(); markLadder(); });
+  $("pkg").addEventListener("change", () => { const v = $("pkg").value.trim(); if (G.nodes[v]) select(v); });
+  $("pkg").addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter") return;
+    const v = $("pkg").value.trim();
+    if (G.nodes[v]) return select(v);
+    const hit = Object.keys(G.nodes).sort().find(id => id.startsWith(v)) || Object.keys(G.nodes).sort().find(id => id.includes(v));
+    if (hit) select(hit);
+  });
+  window.addEventListener("hashchange", () => { const h = decodeURIComponent(location.hash.slice(1)); if (G && G.nodes[h] && h !== cur) select(h, true); });
+
+  fetch("data.json").then(r => r.json()).then(d => {
+    DATA = d;
+    useDistro(dsel.value);
+    const h = decodeURIComponent(location.hash.slice(1));
+    const start = G.nodes[h] ? h : (G.nodes[recall("depgraph.pkg")] ? recall("depgraph.pkg") : "postgis37_18");
+    select(G.nodes[start] ? start : Object.keys(G.nodes)[0], true);
+  }).catch(() => {
+    $("detail").textContent = "";
+    $("detail").append(el("p", { class: "empty", text: "The graph data did not load. Reload the page to try again." }));
+  });
+})();
+</script>
+</body>
+</html>
