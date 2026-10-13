@@ -162,7 +162,7 @@ details summary { cursor: pointer; font-weight: 600; }
         <li>Automatic dependencies (shared library sonames, <code>pkgconfig()</code>, <code>python3.Xdist()</code>) are only generated at build time, so they are missing here. Where a package links to a library it does not name in its spec, the build edge usually covers it, as with gdal's <code>BuildRequires: proj98-devel</code>.</li>
         <li>When several packages provide one name (for example <code>postgis</code> or <code>postgresql-server</code>), the one for the same PostgreSQL version wins. When there is still more than one, the edge is shown as "any of" and does not change the build steps.</li>
         <li>The host's rpm evaluated the specs with <code>rhel</code>, <code>fedora</code>, <code>suse_version</code> or <code>amzn</code> defined. SLES-only macros that the host does not have may hide a few SLES branches. On F-45, SLES and EL-8, Python version macros that call an interpreter missing on the host were pinned to that distro's Python.</li>
-        <li>Generated <span id="gendate">2026-10-08</span> from pgrpms master (<code>e8c487dca</code>).</li>
+        <li>Generated <span id="gendate">2026-10-13</span> from pgrpms master (<code>b2f132c07</code>).</li>
       </ul>
     </details>
   </section>
